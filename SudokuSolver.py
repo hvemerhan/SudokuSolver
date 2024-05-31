@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
 import pytesseract
-from SudokuSolver.SudokuSolver import Sudoku
 
+""" Capture image from camera"""
 class CameraCapture:
     def __init__(self):
         self.cap = cv2.VideoCapture(0)
@@ -17,6 +17,7 @@ class CameraCapture:
         cv2.destroyAllWindows()
         return frame
 
+""" Preprocess image"""
 class ImagePreprocessor:
     def preprocess(self, image):
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -25,6 +26,7 @@ class ImagePreprocessor:
                                        cv2.THRESH_BINARY, 11, 2)
         return thresh
 
+""" Detect grid and warp perspective"""
 class GridDetector:
     def find_grid(self, thresh):
         contours, _ = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -43,6 +45,7 @@ class GridDetector:
         M = cv2.getPerspectiveTransform(pts, dst_pts)
         return cv2.warpPerspective(image, M, (int(side), int(side)))
 
+""" Extract digits from cells"""
 class DigitExtractor:
     def extract_digits(self, warped):
         side = warped.shape[0] // 9
@@ -55,12 +58,38 @@ class DigitExtractor:
                 board[i, j] = int(text) if text else 0
         return board
 
-class SudokuSolver:
+""" Solve Sudoku"""
+class Solver:
     def solve_sudoku(self, board):
-        puzzle = Sudoku(3, 3, board=board.tolist())
-        solution = puzzle.solve()
-        return solution.board
+        def is_valid(board, row, col, num):
+            for i in range(9):
+                if board[row][i] == num or board[i][col] == num:
+                    return False
+            start_row, start_col = 3 * (row // 3), 3 * (col // 3)
+            for i in range(start_row, start_row + 3):
+                for j in range(start_col, start_col + 3):
+                    if board[i][j] == num:
+                        return False
+            return True
 
+        def solve(board):
+            for row in range(9):
+                for col in range(9):
+                    if board[row][col] == 0:
+                        for num in range(1, 10):
+                            if is_valid(board, row, col, num):
+                                board[row][col] = num
+                                if solve(board):
+                                    return True
+                                board[row][col] = 0
+                        return False
+            return True
+
+        board_copy = np.copy(board)
+        solve(board_copy)
+        return board_copy
+
+""" Display solution"""
 class SolutionDisplayer:
     def display_solution(self, image, grid, board, solution):
         side = image.shape[0] // 9
@@ -74,3 +103,37 @@ class SolutionDisplayer:
         cv2.imshow('Solved Sudoku', image)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
+
+""" Main function"""
+def main():
+    # Capture image
+    camera = CameraCapture()
+    image = camera.capture_image()
+
+    # Preprocess image
+    preprocessor = ImagePreprocessor()
+    thresh = preprocessor.preprocess(image)
+
+    # Detect grid
+    detector = GridDetector()
+    grid = detector.find_grid(thresh)
+    warped = detector.warp_perspective(image, grid)
+
+    # Extract digits
+    extractor = DigitExtractor()
+    board = extractor.extract_digits(warped)
+    print("Extracted board:")
+    print(board)
+
+    # Solve Sudoku
+    solver = Solver()
+    solution = solver.solve_sudoku(board)
+    print("Solution:")
+    print(solution)
+
+    # Display solution
+    displayer = SolutionDisplayer()
+    displayer.display_solution(image, grid, board, solution)
+
+if __name__ == "__main__":
+    main()
